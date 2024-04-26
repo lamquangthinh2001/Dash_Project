@@ -26,6 +26,9 @@ df = pd.DataFrame(data)
 # Initialize the Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
+# Declare server for Heroku deployment. Needed for Procfile.
+server = app.server
+
 # Define app layout
 app.layout = dbc.Container([
     html.H1("New Zealand Tourism Dashboard", className='text-center mb-4'),
