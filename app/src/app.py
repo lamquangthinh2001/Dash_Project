@@ -1,97 +1,155 @@
 import dashtools
 import gunicorn
 import dash
-from dash import dcc
-from dash import html
-from dash.dependencies import Input, Output
+from dash import Input, Output, State, dcc, html
 import pandas as pd
 import plotly.express as px
 import numpy as np
 from datetime import datetime, timedelta
 import dash_bootstrap_components as dbc
 
-# Generate fake data
-np.random.seed(0)
-dates = pd.date_range(start='2023-01-01', end='2024-12-31')
-destinations = ['Auckland', 'Wellington', 'Queenstown']
-data = {'Date': [], 'Destination': [], 'Tourist_Arrivals': [], 'Revenue': []}
+# link fontawesome to get the chevron icons
+app = dash.Dash(
+    external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME]
+)
 
-for date in dates:
-    for dest in destinations:
-        data['Date'].append(date)
-        data['Destination'].append(dest)
-        data['Tourist_Arrivals'].append(np.random.randint(5000, 20000))
-        data['Revenue'].append(np.random.randint(100000, 500000))
-
-df = pd.DataFrame(data)
-
-# Initialize the Dash app
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
-# Declare server for Heroku deployment. Needed for Procfile.
 server = app.server
 
-# Define app layout
-app.layout = dbc.Container([
-    html.H1("New Zealand Tourism Dashboard", className='text-center mb-4'),
-    
-    dbc.Row([
-        dbc.Col(
-            dcc.Dropdown(id='destination-dropdown',
-                         options=[{'label': dest, 'value': dest} for dest in destinations],
-                         value='Auckland',
-                         className='mb-3'
-            ),
-            width=6
-        ),
-        dbc.Col(
-            dcc.RangeSlider(
-                id='date-range-slider',
-                min=df['Date'].min().timestamp(),
-                max=df['Date'].max().timestamp(),
-                value=[df['Date'].min().timestamp(), df['Date'].max().timestamp()],
-                marks={timestamp: datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d') for timestamp in np.linspace(df['Date'].min().timestamp(), df['Date'].max().timestamp(), num=10)}
-            ),
-            width=6
-        ),
-    ]),
-    
-    dbc.Row([
-        dbc.Col(
-            dcc.Graph(id='arrival-graph'),
-            width=6
-        ),
-        dbc.Col(
-            dcc.Graph(id='revenue-graph'),
-            width=6
-        ),
-    ]),
-], fluid=True)
+# the style arguments for the sidebar. We use position:fixed and a fixed width
+SIDEBAR_STYLE = {
+    "position": "fixed",
+    "top": 0,
+    "left": 0,
+    "bottom": 0,
+    "width": "16rem",
+    "padding": "2rem 1rem",
+    "background-color": "#f8f9fa",
+}
 
-# Define callback functions
-@app.callback(
-    [Output('arrival-graph', 'figure'),
-     Output('revenue-graph', 'figure')],
-    [Input('destination-dropdown', 'value'),
-     Input('date-range-slider', 'value')]
+# the styles for the main content position it to the right of the sidebar and
+# add some padding.
+CONTENT_STYLE = {
+    "margin-left": "18rem",
+    "margin-right": "2rem",
+    "padding": "2rem 1rem",
+}
+
+submenu_1 = [
+    html.Li(
+        # use Row and Col components to position the chevrons
+        dbc.Row(
+            [
+                dbc.Col("Menu 1"),
+                dbc.Col(
+                    html.I(className="fas fa-chevron-right me-3"),
+                    width="auto",
+                ),
+            ],
+            className="my-1",
+        ),
+        style={"cursor": "pointer"},
+        id="submenu-1",
+    ),
+    # we use the Collapse component to hide and reveal the navigation links
+    dbc.Collapse(
+        [
+            dbc.NavLink("Page 1.1", href="/page-1/1"),
+            dbc.NavLink("Page 1.2", href="/page-1/2"),
+        ],
+        id="submenu-1-collapse",
+    ),
+]
+
+submenu_2 = [
+    html.Li(
+        dbc.Row(
+            [
+                dbc.Col("Menu 2"),
+                dbc.Col(
+                    html.I(className="fas fa-chevron-right me-3"),
+                    width="auto",
+                ),
+            ],
+            className="my-1",
+        ),
+        style={"cursor": "pointer"},
+        id="submenu-2",
+    ),
+    dbc.Collapse(
+        [
+            dbc.NavLink("Page 2.1", href="/page-2/1"),
+            dbc.NavLink("Page 2.2", href="/page-2/2"),
+        ],
+        id="submenu-2-collapse",
+    ),
+]
+
+
+sidebar = html.Div(
+    [
+        html.H2("Sidebar", className="display-4"),
+        html.Hr(),
+        html.P(
+            "A sidebar with collapsible navigation links", className="lead"
+        ),
+        dbc.Nav(submenu_1 + submenu_2, vertical=True),
+    ],
+    style=SIDEBAR_STYLE,
+    id="sidebar",
 )
-def update_graph(selected_destination, date_range):
-    start_date = datetime.fromtimestamp(date_range[0])
-    end_date = datetime.fromtimestamp(date_range[1])
-    filtered_df = df[(df['Destination'] == selected_destination) & (df['Date'] >= start_date) & (df['Date'] <= end_date)]
-    
-    arrival_fig = px.line(filtered_df, x='Date', y='Tourist_Arrivals', title=f'Tourist Arrivals in {selected_destination}')
-    arrival_fig.update_xaxes(title_text="Date")
-    arrival_fig.update_yaxes(title_text="Tourist Arrivals")
-    arrival_fig.update_layout(margin=dict(l=20, r=20, t=50, b=20))
-    
-    revenue_fig = px.bar(filtered_df, x='Date', y='Revenue', title=f'Revenue in {selected_destination}')
-    revenue_fig.update_xaxes(title_text="Date")
-    revenue_fig.update_yaxes(title_text="Revenue (USD)")
-    revenue_fig.update_layout(margin=dict(l=20, r=20, t=50, b=20))
-    
-    return arrival_fig, revenue_fig
 
-# Run the app
-if __name__ == '__main__':
-    app.run_server(debug=True)
+content = html.Div(id="page-content", style=CONTENT_STYLE)
+
+app.layout = html.Div([dcc.Location(id="url"), sidebar, content])
+
+
+# this function is used to toggle the is_open property of each Collapse
+def toggle_collapse(n, is_open):
+    if n:
+        return not is_open
+    return is_open
+
+
+# this function applies the "open" class to rotate the chevron
+def set_navitem_class(is_open):
+    if is_open:
+        return "open"
+    return ""
+
+
+for i in [1, 2]:
+    app.callback(
+        Output(f"submenu-{i}-collapse", "is_open"),
+        [Input(f"submenu-{i}", "n_clicks")],
+        [State(f"submenu-{i}-collapse", "is_open")],
+    )(toggle_collapse)
+
+    app.callback(
+        Output(f"submenu-{i}", "className"),
+        [Input(f"submenu-{i}-collapse", "is_open")],
+    )(set_navitem_class)
+
+
+@app.callback(Output("page-content", "children"), [Input("url", "pathname")])
+def render_page_content(pathname):
+    if pathname in ["/", "/page-1/1"]:
+        return html.P("This is the content of page 1.1!")
+    elif pathname == "/page-1/2":
+        return html.P("This is the content of page 1.2. Yay!")
+    elif pathname == "/page-2/1":
+        return html.P("Oh cool, this is page 2.1!")
+    elif pathname == "/page-2/2":
+        return html.P("No way! This is page 2.2!")
+    # If the user tries to reach a different page, return a 404 message
+    return html.Div(
+        [
+            html.H1("404: Not found", className="text-danger"),
+            html.Hr(),
+            html.P(f"The pathname {pathname} was not recognised..."),
+        ],
+        className="p-3 bg-light rounded-3",
+    )
+
+
+if __name__ == "__main__":
+    app.run_server(port=8888, debug=True)
